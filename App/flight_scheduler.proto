@@ -1,0 +1,152 @@
+syntax = "proto3";
+
+option swift_package = "GdsSandbox";
+
+package flightscheduler;
+
+// Import necessary libraries and dependencies
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/wrappers.proto";
+
+// Enum for FlightStatus
+enum FlightStatus {
+    SCHEDULED = 0;
+    IN_PROGRESS = 1;
+    COMPLETED = 2;
+    CANCELLED = 3;
+}
+
+// Enum for ErrorCode
+enum ErrorCode {
+    UNKNOWN_ERROR = 0;
+    INVALID_REQUEST = 1;
+    PILOT_NOT_FOUND = 2;
+    SCHEDULE_CONFLICT = 3;
+    AUTHORIZATION_FAILED = 4;
+}
+
+// Metadata for RequestContext
+message RequestContext {
+    string request_id = 1;
+    string client_version = 2;
+    string client_id = 3;
+    google.protobuf.Timestamp request_timestamp = 4;
+}
+
+// Error Details
+message ErrorDetails {
+    ErrorCode code = 1;
+    string message = 2;
+    string field = 3; // Which field in the request caused the error
+}
+
+// Message for Pilot Information
+message PilotInfo {
+    string pilot_id = 1;
+    string name = 2;
+    string rank = 3;
+    string contact_email = 4;
+    repeated string certifications = 5;
+    google.protobuf.Timestamp date_of_birth = 6;
+}
+
+// The request message for scheduling a flight
+message ScheduleFlightRequest {
+    RequestContext context = 1;
+    PilotInfo pilot = 2;
+    string aircraft_id = 3;
+    string destination = 4;
+    google.protobuf.Timestamp flight_date = 5; // Using protobuf Timestamp for date
+}
+
+// The response message containing the flight scheduling confirmation
+message ScheduleFlightResponse {
+    string confirmation_id = 1;
+    string confirmation_message = 2;
+    FlightStatus status = 3;
+    google.protobuf.Timestamp scheduled_date = 4;
+    repeated ErrorDetails errors = 5; // Error details if the scheduling fails
+}
+
+// Request message for retrieving a flight schedule
+message GetScheduleRequest {
+    string pilot_id = 1;
+    google.protobuf.Timestamp from_date = 2;
+    google.protobuf.Timestamp to_date = 3;
+}
+
+// Response message for retrieving a flight schedule
+message GetScheduleResponse {
+    repeated ScheduledFlight flights = 1;
+}
+
+// Message representing a single scheduled flight
+message ScheduledFlight {
+    string flight_id = 1;
+    string aircraft_id = 2;
+    string destination = 3;
+    FlightStatus status = 4;
+    google.protobuf.Timestamp scheduled_date = 5;
+}
+
+// Request message for streaming flight updates
+message FlightUpdateRequest {
+    string pilot_id = 1;
+    string aircraft_id = 2;
+}
+
+// Stream of flight updates
+message FlightUpdate {
+    string flight_id = 1;
+    FlightStatus status = 2;
+    google.protobuf.Timestamp update_timestamp = 3;
+}
+
+// The flight scheduling service definition
+service FlightScheduler {
+    
+    // Schedules a flight for a given pilot on a specified date
+    rpc ScheduleFlight (ScheduleFlightRequest) returns (ScheduleFlightResponse);
+
+    // Retrieves the flight schedule for a specific pilot
+    rpc GetSchedule (GetScheduleRequest) returns (GetScheduleResponse);
+
+    // Server-side streaming: sends continuous updates about a flight's status
+    rpc StreamFlightUpdates (FlightUpdateRequest) returns (stream FlightUpdate);
+
+    // Bi-directional streaming: pilot reports in-flight status updates, and the server responds with acknowledgments or instructions
+    rpc InFlightStatusReport (stream InFlightStatusRequest) returns (stream InFlightStatusResponse);
+
+    // Unary call to cancel a scheduled flight
+    rpc CancelFlight (CancelFlightRequest) returns (CancelFlightResponse);
+}
+
+// Request for in-flight status reporting
+message InFlightStatusRequest {
+    string flight_id = 1;
+    FlightStatus status = 2;
+    google.protobuf.Timestamp report_time = 3;
+    string message = 4;
+}
+
+// Response for in-flight status reporting
+message InFlightStatusResponse {
+    string flight_id = 1;
+    string response_message = 2;
+    FlightStatus next_status = 3;
+    google.protobuf.Timestamp next_update_time = 4;
+}
+
+// Request to cancel a scheduled flight
+message CancelFlightRequest {
+    string flight_id = 1;
+    RequestContext context = 2;
+}
+
+// Response to confirm the cancellation of a flight
+message CancelFlightResponse {
+    string confirmation_id = 1;
+    string message = 2;
+    FlightStatus status = 3;
+}
