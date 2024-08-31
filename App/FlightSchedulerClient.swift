@@ -3,20 +3,35 @@ import NIO
 import Foundation
 
 class FlightSchedulerClient {
-
     private let client: flightscheduler_FlightSchedulerClient
+    private var authToken: String?
 
-    init() {
-        // Setup the gRPC channel
+    init(authToken: String? = nil) {
+        self.authToken = authToken
+        
+        // Setup the gRPC channel with TLS encryption
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-        let channel = ClientConnection.insecure(group: group)
-            .connect(host: "localhost", port: 50051)
+        let configuration = ClientConnection.Configuration(
+            target: .hostAndPort("localhost", 50051),
+            eventLoopGroup: group,
+            tls: .init() // Enable TLS
+        )
+        let channel = ClientConnection(configuration: configuration)
 
         // Initialize the client
         self.client = flightscheduler_FlightSchedulerClient(channel: channel)
     }
 
+    func setAuthToken(_ token: String) {
+        self.authToken = token
+    }
+
     func scheduleFlight(for pilotID: String, on date: Date, completion: @escaping (Result<String, Error>) -> Void) {
+        guard let authToken = authToken else {
+            completion(.failure(NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "No auth token provided"])))
+            return
+        }
+
         // Format the date as ISO 8601
         let dateFormatter = ISO8601DateFormatter()
         let flightDate = dateFormatter.string(from: date)
@@ -26,8 +41,12 @@ class FlightSchedulerClient {
         request.pilotID = pilotID
         request.flightDate = flightDate
 
+        // Add authentication token to the request metadata
+        var callOptions = CallOptions()
+        callOptions.customMetadata.add(name: "Authorization", value: "Bearer \(authToken)")
+
         // Call the gRPC method
-        let call = client.scheduleFlight(request)
+        let call = client.scheduleFlight(request, callOptions: callOptions)
 
         call.response.whenComplete { result in
             switch result {

@@ -2,13 +2,16 @@ import UIKit
 
 class ViewController: UIViewController {
 
-    @IBOutlet weak var airlineSegmentControl: UISegmentedControl!
-    @IBOutlet weak var flightNumberTextField: UITextField!
-    @IBOutlet weak var fetchDetailsButton: UIButton!
+    @IBOutlet weak var usernameTextField: UITextField!
+    @IBOutlet weak var passwordTextField: UITextField!
+    @IBOutlet weak var flightDatePicker: UIDatePicker!
+    @IBOutlet weak var pilotIDTextField: UITextField!
+    @IBOutlet weak var scheduleButton: UIButton!
     @IBOutlet weak var statusLabel: UILabel!
     @IBOutlet weak var activityIndicator: UIActivityIndicatorView!
 
-    let airlineAPIManager = AirlineAPIManager()
+    let apiGateway = ApiGateway.shared
+    var flightSchedulerClient: FlightSchedulerClient?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -16,46 +19,57 @@ class ViewController: UIViewController {
     }
 
     private func setupUI() {
-        fetchDetailsButton.layer.cornerRadius = 8
+        scheduleButton.layer.cornerRadius = 8
         statusLabel.text = ""
         activityIndicator.isHidden = true
     }
 
-    @IBAction func fetchFlightDetailsTapped(_ sender: UIButton) {
-        guard let flightNumber = flightNumberTextField.text, !flightNumber.isEmpty else {
-            statusLabel.text = "Flight number cannot be empty."
+    @IBAction func authenticateTapped(_ sender: UIButton) {
+        guard let username = usernameTextField.text, !username.isEmpty,
+              let password = passwordTextField.text, !password.isEmpty else {
+            statusLabel.text = "Username and password cannot be empty."
             return
         }
 
-        let selectedAirline: Airline
-        switch airlineSegmentControl.selectedSegmentIndex {
-        case 0:
-            selectedAirline = .thy
-        case 1:
-            selectedAirline = .flydubai
-        case 2:
-            selectedAirline = .pegasus
-        case 3:
-            selectedAirline = .wizzair
-        default:
-            statusLabel.text = "Please select an airline."
+        apiGateway.authenticateUser(username: username, password: password, role: .pilot) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let token):
+                    self?.flightSchedulerClient = FlightSchedulerClient(authToken: token)
+                    self?.statusLabel.text = "Authentication successful. You can now schedule flights."
+                case .failure(let error):
+                    self?.statusLabel.text = "Authentication failed: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    @IBAction func scheduleFlightTapped(_ sender: UIButton) {
+        guard let client = flightSchedulerClient else {
+            statusLabel.text = "Please authenticate first."
             return
         }
 
+        guard let pilotID = pilotIDTextField.text, !pilotID.isEmpty else {
+            statusLabel.text = "Pilot ID cannot be empty."
+            return
+        }
+
+        let flightDate = flightDatePicker.date
         statusLabel.text = ""
         activityIndicator.isHidden = false
         activityIndicator.startAnimating()
 
-        airlineAPIManager.fetchFlightDetails(for: selectedAirline, flightNumber: flightNumber) { [weak self] result in
+        client.scheduleFlight(for: pilotID, on: flightDate) { [weak self] result in
             DispatchQueue.main.async {
                 self?.activityIndicator.stopAnimating()
                 self?.activityIndicator.isHidden = true
 
                 switch result {
-                case .success(let flightDetails):
-                    self?.statusLabel.text = "Flight details: \(flightDetails)"
+                case .success(let confirmationMessage):
+                    self?.statusLabel.text = "Flight scheduled: \(confirmationMessage)"
                 case .failure(let error):
-                    self?.statusLabel.text = "Failed to fetch flight details: \(error.localizedDescription)"
+                    self?.statusLabel.text = "Failed to schedule flight: \(error.localizedDescription)"
                 }
             }
         }
