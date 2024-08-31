@@ -2,44 +2,60 @@ import UIKit
 
 class ViewController: UIViewController {
 
-    // UI Elements
-    @IBOutlet weak var flightDatePicker: UIDatePicker!
-    @IBOutlet weak var pilotIDTextField: UITextField!
-    @IBOutlet weak var scheduleButton: UIButton!
+    @IBOutlet weak var airlineSegmentControl: UISegmentedControl!
+    @IBOutlet weak var flightNumberTextField: UITextField!
+    @IBOutlet weak var fetchDetailsButton: UIButton!
     @IBOutlet weak var statusLabel: UILabel!
+    @IBOutlet weak var activityIndicator: UIActivityIndicatorView!
 
-    let flightScheduler = FlightScheduler()
+    let airlineAPIManager = AirlineAPIManager()
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        // Additional setup if needed
         setupUI()
     }
 
     private func setupUI() {
-        // Customize UI elements
-        scheduleButton.layer.cornerRadius = 8
+        fetchDetailsButton.layer.cornerRadius = 8
         statusLabel.text = ""
+        activityIndicator.isHidden = true
     }
 
-    @IBAction func scheduleFlightTapped(_ sender: UIButton) {
-        guard let pilotID = pilotIDTextField.text, !pilotID.isEmpty else {
-            statusLabel.text = "Pilot ID cannot be empty."
+    @IBAction func fetchFlightDetailsTapped(_ sender: UIButton) {
+        guard let flightNumber = flightNumberTextField.text, !flightNumber.isEmpty else {
+            statusLabel.text = "Flight number cannot be empty."
             return
         }
 
-        let flightDate = flightDatePicker.date
+        let selectedAirline: Airline
+        switch airlineSegmentControl.selectedSegmentIndex {
+        case 0:
+            selectedAirline = .thy
+        case 1:
+            selectedAirline = .flydubai
+        case 2:
+            selectedAirline = .pegasus
+        case 3:
+            selectedAirline = .wizzair
+        default:
+            statusLabel.text = "Please select an airline."
+            return
+        }
 
-        // Schedule the flight
-        flightScheduler.scheduleFlight(for: pilotID, on: flightDate) { [weak self] result in
-            switch result {
-            case .success(let response):
-                DispatchQueue.main.async {
-                    self?.statusLabel.text = "Flight scheduled: \(response)"
-                }
-            case .failure(let error):
-                DispatchQueue.main.async {
-                    self?.statusLabel.text = "Failed to schedule flight: \(error.localizedDescription)"
+        statusLabel.text = ""
+        activityIndicator.isHidden = false
+        activityIndicator.startAnimating()
+
+        airlineAPIManager.fetchFlightDetails(for: selectedAirline, flightNumber: flightNumber) { [weak self] result in
+            DispatchQueue.main.async {
+                self?.activityIndicator.stopAnimating()
+                self?.activityIndicator.isHidden = true
+
+                switch result {
+                case .success(let flightDetails):
+                    self?.statusLabel.text = "Flight details: \(flightDetails)"
+                case .failure(let error):
+                    self?.statusLabel.text = "Failed to fetch flight details: \(error.localizedDescription)"
                 }
             }
         }
